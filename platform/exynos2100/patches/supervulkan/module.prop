@@ -1,0 +1,4 @@
+id=vulkan
+name=Vulkan render fix
+author=claude by anthropic
+description= workaround vulkan glitches.
