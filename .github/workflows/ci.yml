@@ -2,14 +2,8 @@ name: CI
 
 on:
   workflow_dispatch:
-  pull_request:
-  push:
     branches:
       - 'sixteen'
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   shellcheck:
@@ -56,7 +50,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: ${{ fromJSON(needs.generate-matrix.outputs.matrix) }}
+        target: [r9s]
 
     steps:
       - name: Checkout repo
@@ -132,4 +126,32 @@ jobs:
         run: ./scripts/extract_fw.sh
 
       - name: Build ROM
-        run: ./scripts/make_rom.sh
+        run: |
+          source ./buildenv.sh ${{ matrix.target }}
+          ./scripts/make_rom.sh --build-rom-zip
+
+      - name: Upload to GoFile
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+
+          find out -type f | while read -r FILE; do
+            echo "Uploading: $FILE"
+
+            RESPONSE=$(curl -s \
+              -F "file=@${FILE}" \
+              -F "token=${{ secrets.GOFILE_TOKEN }}" \
+              -F "folderId=${{ secrets.GOFILE_FOLDER_ID }}" \
+              "https://upload-eu-par.gofile.io/uploadFile")
+
+            echo "Download URL:"
+            echo "$RESPONSE" | jq -r '.data.downloadPage'
+
+            echo "MD5:"
+            md5sum "$FILE"
+
+            echo "SHA256:"
+            sha256sum "$FILE"
+
+            echo "----------------------------------------"
+          done
