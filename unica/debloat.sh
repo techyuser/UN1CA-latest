@@ -458,6 +458,7 @@ system/app/SmartManager_v6_DeviceSecurity
 system/priv-app/OMCAgent5
 system/app/MinusOnePage
 system/app/MyDevice
+"
 # YouTube
 PRODUCT_DEBLOAT+="
 app/YouTube
