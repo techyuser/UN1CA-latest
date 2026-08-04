@@ -3,7 +3,7 @@ name: CI
 on:
   workflow_dispatch:
     branches:
-      - 'sixteen'
+      - 'latest'
 
 jobs:
   shellcheck:
@@ -50,7 +50,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [r9s]
+        target: ${{ fromJSON(needs.generate-matrix.outputs.matrix) }}
 
     steps:
       - name: Checkout repo
