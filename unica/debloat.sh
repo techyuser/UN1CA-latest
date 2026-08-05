@@ -448,8 +448,6 @@ system/priv-app/Fmm
 system/priv-app/FotaAgent
 system/priv-app/GalaxyApps_OPEN
 system/priv-app/GalleryWidget
-system/priv-app/GameOptimizingServices
-system/priv-app/GameTools_Dream
 system/priv-app/LinkToWindowsService
 system/priv-app/StoryService
 system/priv-app/StickerFaceARAvatar
