@@ -494,8 +494,12 @@ jobs:
           echo "SHA256      : $ZIP_SHA256"
           echo "Firmwares   : $EXTRACT_FIRMWARES"
           echo "GoFile URL  : $DOWNLOAD_URL"
-          [ -n "$DIRECT_LINK" ] && echo "Direct Link : $DIRECT_LINK"
-          [ -n "$FILE_ID" ] && echo "File ID     : $FILE_ID"
+          if [ -n "$DIRECT_LINK" ]; then
+            echo "Direct Link : $DIRECT_LINK"
+          fi
+          if [ -n "$FILE_ID" ]; then
+            echo "File ID     : $FILE_ID"
+          fi
           echo "=============================================="
 
           {
@@ -510,5 +514,7 @@ jobs:
             echo "| **MD5** | \`$ZIP_MD5\` |"
             echo "| **SHA256** | \`$ZIP_SHA256\` |"
             echo "| **GoFile Download** | $DOWNLOAD_URL |"
-            [ -n "$DIRECT_LINK" ] && echo "| **Direct Link** | $DIRECT_LINK |"
+            if [ -n "$DIRECT_LINK" ]; then
+              echo "| **Direct Link** | $DIRECT_LINK |"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
