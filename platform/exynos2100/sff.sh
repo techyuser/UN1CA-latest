@@ -3,7 +3,7 @@
 
 # SEC Floating Feature configuration file for Samsung Exynos 2100 devices (exynos2100)
 
-# Enable USB-PD Passthrough (depends on platform/exynos2100/patches/chiclet)
+# Enable USB-PD Passthrough (depends on platform/exynos2100/patches/floppy)
 SEC_FLOATING_FEATURE_BATTERY_SUPPORT_PASS_THROUGH=TRUE
 
 # Enable 360 Lite Portrait

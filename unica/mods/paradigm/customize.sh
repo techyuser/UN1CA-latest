@@ -112,63 +112,65 @@ ADD_TO_WORK_DIR "pa2qxxx" "system" "system/lib64/libveframework.videoeditor.sams
 SET_FLOATING_FEATURE_CONFIG "SEC_FLOATING_FEATURE_AUDIO_CONFIG_MULTISOURCE_SEPARATOR" "{FastScanning_6, SourceSeparator_4, Version_1.3.0}"
 LOG_STEP_OUT
 
-# Now brief
-# Requires SEC_FLOATING_FEATURE_COMMON_CONFIG_AI_VERSION >= 20251
-# or SEC_FLOATING_FEATURE_FRAMEWORK_SUPPORT_AI_BRIEF_FOR_UT
-LOG_STEP_IN "- Adding Now brief feature"
-ADD_TO_WORK_DIR "pa2qxxx" "system" \
-    "system/etc/default-permissions/default-permissions-com.samsung.android.app.moments.xml" 0 0 644 "u:object_r:system_file:s0"
-ADD_TO_WORK_DIR "pa2qxxx" "system" \
-    "system/etc/permissions/privapp-permissions-com.samsung.android.app.moments.xml" 0 0 644 "u:object_r:system_file:s0"
-ADD_TO_WORK_DIR "pa2qxxx" "system" \
-    "system/etc/sysconfig/moments.xml" 0 0 644 "u:object_r:system_file:s0"
-ADD_TO_WORK_DIR "pa2qxxx" "system" "system/priv-app/Moments/Moments.apk" 0 0 644 "u:object_r:system_file:s0"
-ADD_TO_WORK_DIR "$MODPATH" "system" \
-    "system/priv-app/SamsungSmartSuggestions/SamsungSmartSuggestions.apk" 0 0 644 "u:object_r:system_file:s0"
-# HACK [
-# Samsung has released an update for the Smart suggestions app in March 2026.
-# The versioning of the "basic-global-release" flavor differs from the "full-global-release" one.
-# This is done on purpose: Samsung uses a lower version number to avoid installing this variant
-# on unsupported devices by triggering the downgrade check in PM. To avoid users updating to the
-# "non-AI" app, let's fake the versionCode so that it matches the latest available version.
-DECODE_APK "system" "system/priv-app/SamsungSmartSuggestions/SamsungSmartSuggestions.apk"
-LOG "- Patching versionCode in SamsungSmartSuggestions.apk"
-EVAL "sed -i \"s/710500000/711100100/g\" \"$APKTOOL_DIR/system/priv-app/SamsungSmartSuggestions/SamsungSmartSuggestions.apk/apktool.yml\""
-# ]
-SET_FLOATING_FEATURE_CONFIG "SEC_FLOATING_FEATURE_FRAMEWORK_SUPPORT_PERSONALIZED_DATA_CORE" "TRUE"
-LOG_STEP_OUT
+if [[ "$TARGET_CODENAME" != "r9s" ]]; then
+    # Now brief
+    # Requires SEC_FLOATING_FEATURE_COMMON_CONFIG_AI_VERSION >= 20251
+    # or SEC_FLOATING_FEATURE_FRAMEWORK_SUPPORT_AI_BRIEF_FOR_UT
+    LOG_STEP_IN "- Adding Now brief feature"
+    ADD_TO_WORK_DIR "pa2qxxx" "system" \
+        "system/etc/default-permissions/default-permissions-com.samsung.android.app.moments.xml" 0 0 644 "u:object_r:system_file:s0"
+    ADD_TO_WORK_DIR "pa2qxxx" "system" \
+        "system/etc/permissions/privapp-permissions-com.samsung.android.app.moments.xml" 0 0 644 "u:object_r:system_file:s0"
+    ADD_TO_WORK_DIR "pa2qxxx" "system" \
+        "system/etc/sysconfig/moments.xml" 0 0 644 "u:object_r:system_file:s0"
+    ADD_TO_WORK_DIR "pa2qxxx" "system" "system/priv-app/Moments/Moments.apk" 0 0 644 "u:object_r:system_file:s0"
+    ADD_TO_WORK_DIR "$MODPATH" "system" \
+        "system/priv-app/SamsungSmartSuggestions/SamsungSmartSuggestions.apk" 0 0 644 "u:object_r:system_file:s0"
+    # HACK [
+    # Samsung has released an update for the Smart suggestions app in March 2026.
+    # The versioning of the "basic-global-release" flavor differs from the "full-global-release" one.
+    # This is done on purpose: Samsung uses a lower version number to avoid installing this variant
+    # on unsupported devices by triggering the downgrade check in PM. To avoid users updating to the
+    # "non-AI" app, let's fake the versionCode so that it matches the latest available version.
+    DECODE_APK "system" "system/priv-app/SamsungSmartSuggestions/SamsungSmartSuggestions.apk"
+    LOG "- Patching versionCode in SamsungSmartSuggestions.apk"
+    EVAL "sed -i \"s/710500000/711100100/g\" \"$APKTOOL_DIR/system/priv-app/SamsungSmartSuggestions/SamsungSmartSuggestions.apk/apktool.yml\""
+    # ]
+    SET_FLOATING_FEATURE_CONFIG "SEC_FLOATING_FEATURE_FRAMEWORK_SUPPORT_PERSONALIZED_DATA_CORE" "TRUE"
+    LOG_STEP_OUT
 
-# Semantic search
-# Requires SEC_FLOATING_FEATURE_COMMON_CONFIG_AI_VERSION >= 20251
-LOG_STEP_IN "- Adding Semantic search feature"
-ADD_TO_WORK_DIR "pa2qxxx" "system" \
-    "system/etc/default-permissions/default-permissions-com.samsung.mediasearch.xml" 0 0 644 "u:object_r:system_file:s0"
-ADD_TO_WORK_DIR "pa2qxxx" "system" \
-    "system/etc/mediasearch/data/dec_adaptor.tflite" 0 0 644 "u:object_r:system_file:s0"
-ADD_TO_WORK_DIR "pa2qxxx" "system" \
-    "system/etc/mediasearch/data/dec_event.tflite" 0 0 644 "u:object_r:system_file:s0"
-ADD_TO_WORK_DIR "pa2qxxx" "system" \
-    "system/etc/mediasearch/data/enc_image.tflite" 0 0 644 "u:object_r:system_file:s0"
-ADD_TO_WORK_DIR "pa2qxxx" "system" \
-    "system/etc/mediasearch/data/enc_text.tflite" 0 0 644 "u:object_r:system_file:s0"
-ADD_TO_WORK_DIR "pa2qxxx" "system" \
-    "system/etc/mediasearch/data/versioninfo.json" 0 0 644 "u:object_r:system_file:s0"
-ADD_TO_WORK_DIR "pa2qxxx" "system" \
-    "system/etc/permissions/privapp-permissions-com.samsung.mediasearch.xml" 0 0 644 "u:object_r:system_file:s0"
-ADD_TO_WORK_DIR "pa2qxxx" "system" \
-    "system/priv-app/MediaSearch/MediaSearch.apk" 0 0 644 "u:object_r:system_file:s0"
-ADD_TO_WORK_DIR "pa2qxxx" "system" \
-    "system/priv-app/SemanticSearchCore/SemanticSearchCore.apk" 0 0 644 "u:object_r:system_file:s0"
-DECODE_APK "system" "system/priv-app/SecSettingsIntelligence/SecSettingsIntelligence.apk"
-LOG "- Enabling Semantic search feature in /system/system/priv-app/SecSettingsIntelligence/SecSettingsIntelligence.apk"
-EVAL "cp -a \"$MODPATH/semanticsearch/SecSettingsIntelligence.apk/res/raw/\"* \"$APKTOOL_DIR/system/priv-app/SecSettingsIntelligence/SecSettingsIntelligence.apk/res/raw\""
-SMALI_PATCH "system" "system/priv-app/SecSettingsIntelligence/SecSettingsIntelligence.apk" \
-    "smali_classes2/com/samsung/android/settings/intelligence/Rune.smali" "replaceall" \
-    "const-string v1, \\\"\\\"" \
-    "const-string v1, \\\"400\\\"" \
-    > /dev/null
-SET_FLOATING_FEATURE_CONFIG "SEC_FLOATING_FEATURE_MSCH_SUPPORT_NLSEARCH" "TRUE"
-LOG_STEP_OUT
+    # Semantic search
+    # Requires SEC_FLOATING_FEATURE_COMMON_CONFIG_AI_VERSION >= 20251
+    LOG_STEP_IN "- Adding Semantic search feature"
+    ADD_TO_WORK_DIR "pa2qxxx" "system" \
+        "system/etc/default-permissions/default-permissions-com.samsung.mediasearch.xml" 0 0 644 "u:object_r:system_file:s0"
+    ADD_TO_WORK_DIR "pa2qxxx" "system" \
+        "system/etc/mediasearch/data/dec_adaptor.tflite" 0 0 644 "u:object_r:system_file:s0"
+    ADD_TO_WORK_DIR "pa2qxxx" "system" \
+        "system/etc/mediasearch/data/dec_event.tflite" 0 0 644 "u:object_r:system_file:s0"
+    ADD_TO_WORK_DIR "pa2qxxx" "system" \
+        "system/etc/mediasearch/data/enc_image.tflite" 0 0 644 "u:object_r:system_file:s0"
+    ADD_TO_WORK_DIR "pa2qxxx" "system" \
+        "system/etc/mediasearch/data/enc_text.tflite" 0 0 644 "u:object_r:system_file:s0"
+    ADD_TO_WORK_DIR "pa2qxxx" "system" \
+        "system/etc/mediasearch/data/versioninfo.json" 0 0 644 "u:object_r:system_file:s0"
+    ADD_TO_WORK_DIR "pa2qxxx" "system" \
+        "system/etc/permissions/privapp-permissions-com.samsung.mediasearch.xml" 0 0 644 "u:object_r:system_file:s0"
+    ADD_TO_WORK_DIR "pa2qxxx" "system" \
+        "system/priv-app/MediaSearch/MediaSearch.apk" 0 0 644 "u:object_r:system_file:s0"
+    ADD_TO_WORK_DIR "pa2qxxx" "system" \
+        "system/priv-app/SemanticSearchCore/SemanticSearchCore.apk" 0 0 644 "u:object_r:system_file:s0"
+    DECODE_APK "system" "system/priv-app/SecSettingsIntelligence/SecSettingsIntelligence.apk"
+    LOG "- Enabling Semantic search feature in /system/system/priv-app/SecSettingsIntelligence/SecSettingsIntelligence.apk"
+    EVAL "cp -a \"$MODPATH/semanticsearch/SecSettingsIntelligence.apk/res/raw/\"* \"$APKTOOL_DIR/system/priv-app/SecSettingsIntelligence/SecSettingsIntelligence.apk/res/raw\""
+    SMALI_PATCH "system" "system/priv-app/SecSettingsIntelligence/SecSettingsIntelligence.apk" \
+        "smali_classes2/com/samsung/android/settings/intelligence/Rune.smali" "replaceall" \
+        "const-string v1, \\\"\\\"" \
+        "const-string v1, \\\"400\\\"" \
+        > /dev/null
+    SET_FLOATING_FEATURE_CONFIG "SEC_FLOATING_FEATURE_MSCH_SUPPORT_NLSEARCH" "TRUE"
+    LOG_STEP_OUT
+fi
 
 # Game Booster
 LOG "- Downloading latest Game Booster app"

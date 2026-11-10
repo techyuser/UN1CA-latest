@@ -27,11 +27,11 @@ if [ -f "$SRC_DIR/target/$TARGET_CODENAME/debloat.sh" ]; then
     source "$SRC_DIR/target/$TARGET_CODENAME/debloat.sh"
 fi
 
-ODM_DEBLOAT="$(sed "/^$/d" <<< "$ODM_DEBLOAT" | sort)"
-PRODUCT_DEBLOAT="$(sed "/^$/d" <<< "$PRODUCT_DEBLOAT" | sort)"
-SYSTEM_DEBLOAT="$(sed "/^$/d" <<< "$SYSTEM_DEBLOAT" | sort)"
-SYSTEM_EXT_DEBLOAT="$(sed "/^$/d" <<< "$SYSTEM_EXT_DEBLOAT" | sort)"
-VENDOR_DEBLOAT="$(sed "/^$/d" <<< "$VENDOR_DEBLOAT" | sort)"
+ODM_DEBLOAT="$(sed "/^$/d" <<< "$ODM_DEBLOAT" | sort -u)"
+PRODUCT_DEBLOAT="$(sed "/^$/d" <<< "$PRODUCT_DEBLOAT" | sort -u)"
+SYSTEM_DEBLOAT="$(sed "/^$/d" <<< "$SYSTEM_DEBLOAT" | sort -u)"
+SYSTEM_EXT_DEBLOAT="$(sed "/^$/d" <<< "$SYSTEM_EXT_DEBLOAT" | sort -u)"
+VENDOR_DEBLOAT="$(sed "/^$/d" <<< "$VENDOR_DEBLOAT" | sort -u)"
 
 if [ "$ODM_DEBLOAT" ]; then
     xargs -I "{}" -P "$(nproc)" \

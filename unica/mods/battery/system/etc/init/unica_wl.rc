@@ -1,0 +1,9 @@
+service unica_wl /system/bin/unica_wl.sh
+    user root
+    group root
+    disabled
+    oneshot
+
+on property:sys.boot_completed=1
+    start unica_wl
+

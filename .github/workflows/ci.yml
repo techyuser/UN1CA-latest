@@ -2,8 +2,12 @@ name: CI
 
 on:
   workflow_dispatch:
-    branches:
-      - 'latest'
+    inputs:
+      target:
+        description: 'Target device codename to build (or "all")'
+        required: true
+        default: 'r9s'
+        type: string
 
 jobs:
   
@@ -21,8 +25,17 @@ jobs:
       - name: Generate CI matrix
         id: generate-matrix
         run: |
-          matrix="$(find target -mindepth 1 -maxdepth 1 -type d -printf '%f\n' \
-            | sort | jq -R -s -c 'split("\n") | map(select(length > 0))')"
+          TARGET_INPUT="${{ inputs.target }}"
+          if [ -n "$TARGET_INPUT" ] && [ "$TARGET_INPUT" != "all" ]; then
+            if [ ! -d "target/$TARGET_INPUT" ]; then
+              echo "Invalid target: $TARGET_INPUT" >&2
+              exit 1
+            fi
+            matrix="$(jq -n --arg t "$TARGET_INPUT" '[$t]')"
+          else
+            matrix="$(find target -mindepth 1 -maxdepth 1 -type d -printf '%f\n' \
+              | sort | jq -R -s -c 'split("\n") | map(select(length > 0))')"
+          fi
           echo "$matrix"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
@@ -119,14 +132,33 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y jq
 
-          find out -type f | while read -r FILE; do
-            echo "Uploading: $FILE"
+          SERVER="$(curl -fsSL https://api.gofile.io/servers | jq -r '.data.servers[0].name // empty' || true)"
+          if [ -n "$SERVER" ]; then
+            UPLOAD_URL="https://${SERVER}.gofile.io/uploadFile"
+          else
+            UPLOAD_URL="https://upload.gofile.io/uploadFile"
+          fi
 
-            RESPONSE=$(curl -s \
+          shopt -s nullglob
+          ZIPS=(out/UN1CA_*.zip)
+          if [ "${#ZIPS[@]}" -eq 0 ]; then
+            ZIPS=(out/*.zip)
+          fi
+
+          for FILE in "${ZIPS[@]}"; do
+            echo "Uploading: $FILE -> $UPLOAD_URL"
+
+            RESPONSE="$(curl -fsSL \
               -F "file=@${FILE}" \
               -F "token=${{ secrets.GOFILE_TOKEN }}" \
               -F "folderId=${{ secrets.GOFILE_FOLDER_ID }}" \
-              "https://upload-eu-par.gofile.io/uploadFile")
+              "$UPLOAD_URL")"
+
+            STATUS="$(echo "$RESPONSE" | jq -r '.status // empty')"
+            if [ "$STATUS" != "ok" ]; then
+              echo "GoFile upload failed: $RESPONSE" >&2
+              exit 1
+            fi
 
             echo "Download URL:"
             echo "$RESPONSE" | jq -r '.data.downloadPage'

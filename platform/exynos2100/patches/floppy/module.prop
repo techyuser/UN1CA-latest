@@ -1,0 +1,5 @@
+id=floppy
+name=FloppyKernel (KSUNext-SUSFS)
+author=Flopster101
+description=Adds FloppyKernel (KSUNext-SUSFS) to the ROM.
+

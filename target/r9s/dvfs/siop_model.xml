@@ -104,7 +104,7 @@
         </component>
 
         <component name="CHG+DISPLAY" tempType="SKIN">
-            <limiter name="Charging" temp="520" value="-1:70" />
+            <limiter name="Charging" temp="600" value="-1:70" />
         </component>
 
     </components>
@@ -112,7 +112,7 @@
     <scenarios>
 
         <scenario name="ScreenOffInCall" tempType="SKIN" priority="1" >
-            <limiter name="Charging" value="59" />
+            <limiter name="Charging" value="70" />
         </scenario>
 
         <scenario name="ScreenOff" tempType="SKIN" priority="1" >
@@ -156,7 +156,7 @@
             <limiter name="CPUFreqMax"                                value="832000" />
             <limiter name="GPUFreqMax" temp="650"                     value="-1:312000" />
             <limiter name="Brightness" temp="570:590:660:680:700:700:700:700:700" value="-1:204:204:149:125:100:100:92:12" />
-            <limiter name="Charging"   temp="590"             value="-1:70"           />
+            <limiter name="Charging"   temp="720"             value="-1:70"           />
             <limiter name="CameraFps"  temp="700"                     value="-1:1" />
         </scenario>
 
@@ -327,7 +327,7 @@
 
         <scenario name="VideoStreamingApp" tempType="SKIN" priority="1" >
             <limiter name="CPUFreqMax" temp="560:580:600:630:670:690" value="-1:1560000:1352000:1040000:1040000:832000" />
-            <limiter name="OverLimit"  temp="580:600:630:570:590"     value="2184000:1872000:1352000:1352000:-1"        />
+            <limiter name="OverLimit"  temp="580:600:630:650:670"     value="2184000:1872000:1352000:1352000:-1"        />
         </scenario>
 
         <scenario name="NavigationApp" tempType="SKIN" priority="1" >

@@ -1,0 +1,5 @@
+id=battery
+name=Battery & wakelock optimizations
+author=techyuser
+description=Enables GMS Doze, inbuilt Deep Doze tuning, background scan/tracing reductions, and FloppyKernel wakelock blocker.
+
