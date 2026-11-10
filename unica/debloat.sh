@@ -203,16 +203,6 @@ system/priv-app/AREmojiEditor
 system/priv-app/AvatarEmojiSticker
 "
 
-# Samsung Calendar
-SYSTEM_DEBLOAT+="
-system/app/SamsungCalendar
-"
-
-# Samsung Clock
-SYSTEM_DEBLOAT+="
-system/app/ClockPackage
-"
-
 # Samsung Free
 SYSTEM_DEBLOAT+="
 system/app/MinusOnePage
@@ -415,7 +405,6 @@ system/priv-app/AREmoji
 system/priv-app/AREmojiEditor
 system/priv-app/AuthFramework
 system/priv-app/BCService
-system/priv-app/CpAgent
 system/priv-app/DiagMonAgent94
 system/priv-app/DigitalKey
 system/priv-app/FBInstaller_NS
