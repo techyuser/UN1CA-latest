@@ -86,13 +86,13 @@
         <component name="DISPLAY" tempType="SKIN">
             <limiter name="Brightness"  temp="600:630:650:670:690:700:700:700" value="-1:204:149:125:100:100:92:12" />
             <limiter name="MultiWindow" temp="700:700:700"             value="-1:1:1" delay="0:300:0" />
-            <limiter name="LimitHrr" temp="700" value="-1:1" />
+            <limiter name="LimitHrr" temp="700" value="-1:-1" />
         </component>
 
         <component name="CP" tempType="LRP">
-            <limiter name="CpLowMode"   temp="700:700:700:700" value="-1:2:2:1" />
-            <limiter name="SADisable"   temp="700:700" value="-1:1" />
-            <limiter name="CpDebugMode" temp="700:700" value="-1:1" />
+            <limiter name="CpLowMode"   temp="700:700:700:700" value="-1:-1:-1:-1" />
+            <limiter name="SADisable"   temp="700:700" value="-1:-1" />
+            <limiter name="CpDebugMode" temp="700:700" value="-1:-1" />
         </component>
 
         <component name="CAM" tempType="SKIN" >
@@ -104,7 +104,7 @@
         </component>
 
         <component name="CHG+DISPLAY" tempType="SKIN">
-            <limiter name="Charging" temp="700" value="-1:70" />
+            <limiter name="Charging" temp="520" value="-1:70" />
         </component>
 
     </components>
@@ -112,7 +112,7 @@
     <scenarios>
 
         <scenario name="ScreenOffInCall" tempType="SKIN" priority="1" >
-            <limiter name="Charging" value="70" />
+            <limiter name="Charging" value="59" />
         </scenario>
 
         <scenario name="ScreenOff" tempType="SKIN" priority="1" >
@@ -148,7 +148,7 @@
             <limiter name="CPUFreqMax"                                value="832000" />
             <limiter name="GPUFreqMax" temp="650"                     value="-1:312000" />
             <limiter name="Brightness" temp="570:590:660:680:700:700:700:700:700" value="-1:204:204:149:125:100:100:92:12" />
-            <limiter name="Charging"   temp="670"             value="-1:70"           />
+            <limiter name="Charging"   temp="590"             value="-1:70"           />
             <limiter name="CameraFps"       temp="670"        value="-1:1" />
         </scenario>
 
@@ -156,7 +156,7 @@
             <limiter name="CPUFreqMax"                                value="832000" />
             <limiter name="GPUFreqMax" temp="650"                     value="-1:312000" />
             <limiter name="Brightness" temp="570:590:660:680:700:700:700:700:700" value="-1:204:204:149:125:100:100:92:12" />
-            <limiter name="Charging"   temp="700"             value="-1:70"           />
+            <limiter name="Charging"   temp="590"             value="-1:70"           />
             <limiter name="CameraFps"  temp="700"                     value="-1:1" />
         </scenario>
 
@@ -255,11 +255,11 @@
         </scenario>
 
         <scenario name="HighBrightness"  tempType="SKIN*BAT" priority="1" region="XSG" >
-            <limiter name="CpLowMode" temp="690.420:550.430:570.580" value="-1:1:1" delay="0:1800:0" />
+            <limiter name="CpLowMode" temp="690.420:550.430:570.580" value="-1:-1:-1" delay="0:1800:0" />
         </scenario>
 
         <scenario name="HighBrightness"  tempType="SKIN*BAT" priority="1" region="KSA" >
-            <limiter name="CpLowMode" temp="700.420:580.430:600.580" value="-1:1:1" delay="0:1800:0" />
+            <limiter name="CpLowMode" temp="700.420:580.430:600.580" value="-1:-1:-1" delay="0:1800:0" />
         </scenario>
 
         <scenario name="NReal" tempType="SKIN" >
