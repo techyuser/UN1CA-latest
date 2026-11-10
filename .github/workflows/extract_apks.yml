@@ -1,0 +1,451 @@
+name: Extract Stock APKs
+
+on:
+  workflow_dispatch:
+    inputs:
+      firmware:
+        description: 'Firmware string (MODEL/CSC/IMEI, space or comma separated). Leave empty to read SOURCE_FIRMWARE (+ SOURCE_EXTRA_FIRMWARES) from config_file.'
+        required: false
+        default: ''
+        type: string
+      config_file:
+        description: 'Config file under unica/configs/ used when firmware input is empty (e.g. essi.sh or qssi.sh)'
+        required: false
+        default: 'essi.sh'
+        type: string
+      target:
+        description: 'Target device config used only to initialize buildenv.sh (target FW is NOT downloaded)'
+        required: false
+        default: 'r9s'
+        type: string
+      bundle_mode:
+        description: 'Which files to bundle from extracted firmware partitions'
+        required: false
+        default: 'ui-status-bar'
+        type: choice
+        options:
+          - ui-status-bar
+          - all-apks
+      extra_patterns:
+        description: 'Optional comma-separated case-insensitive path substrings to also include (e.g. Gallery,HoneyBoard)'
+        required: false
+        default: ''
+        type: string
+      force:
+        description: 'Pass --force to download_fw.sh and extract_fw.sh'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  extract:
+    name: Extract APKs (${{ inputs.firmware || inputs.config_file || 'essi.sh' }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v7
+        with:
+          submodules: 'recursive'
+
+      - name: Free disk space (1/3)
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          sudo docker builder prune -a
+
+      - name: Free disk space (2/3)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          preinstalled-runtimes: true
+
+      - name: Free disk space (3/3)
+        uses: rokibhasansagar/slimhub_actions@main
+        with:
+          retain: 'compiler_cmake'
+
+      - name: Set up build environment
+        run: |
+          sudo apt update
+          DEBIAN_FRONTEND=noninteractive sudo apt install -yq \
+            attr ccache clang ffmpeg jq libbrotli-dev libbz2-dev \
+            libgtest-dev libprotobuf-dev libunwind-dev libpcre2-dev \
+            libzstd-dev lld protobuf-compiler webp zip
+          DEBIAN_FRONTEND=noninteractive sudo apt install -yq "linux-modules-extra-$(uname -r)" || \
+            echo "Warning: linux-modules-extra-$(uname -r) unavailable; relying on built-in modules / fuse.erofs"
+          sudo modprobe erofs || true
+          sudo modprobe f2fs || true
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Generate build config
+        env:
+          TARGET_CFG: ${{ inputs.target }}
+        run: |
+          [ -z "$TARGET_CFG" ] && TARGET_CFG="r9s"
+          source ./buildenv.sh "$TARGET_CFG"
+          {
+            echo "DEBUG=$DEBUG"
+            echo "SRC_DIR=$SRC_DIR"
+            echo "OUT_DIR=$OUT_DIR"
+            echo "ODIN_DIR=$ODIN_DIR"
+            echo "FW_DIR=$FW_DIR"
+            echo "TOOLS_DIR=$TOOLS_DIR"
+            echo "APKTOOL_DIR=$APKTOOL_DIR"
+            echo "WORK_DIR=$WORK_DIR"
+            echo "TMP_DIR=$TMP_DIR"
+          } >> "$GITHUB_ENV"
+          sed -e "/Automatically/d" -e "s/\"//g" "$OUT_DIR/config.sh" >> "$GITHUB_ENV"
+          echo "$TOOLS_DIR/bin" >> "$GITHUB_PATH"
+
+      - name: Resolve firmware list
+        env:
+          RAW_FW: ${{ inputs.firmware }}
+          CFG_NAME: ${{ inputs.config_file }}
+        run: |
+          [ -z "$CFG_NAME" ] && CFG_NAME="essi.sh"
+
+          FW_LIST=()
+          if [ -n "$RAW_FW" ]; then
+            RAW_FW="${RAW_FW//,/ }"
+            read -r -a FW_LIST <<< "$RAW_FW"
+          else
+            CFG_PATH="$SRC_DIR/unica/configs/$CFG_NAME"
+            if [ ! -f "$CFG_PATH" ]; then
+              echo "::error::Config file not found: unica/configs/$CFG_NAME"
+              exit 1
+            fi
+            SOURCE_FIRMWARE=""
+            SOURCE_EXTRA_FIRMWARES=()
+            # shellcheck disable=SC1090
+            source "$CFG_PATH"
+            if [ -n "$SOURCE_FIRMWARE" ]; then
+              FW_LIST+=("$SOURCE_FIRMWARE")
+            fi
+            if [ "${#SOURCE_EXTRA_FIRMWARES[@]}" -gt 0 ]; then
+              FW_LIST+=("${SOURCE_EXTRA_FIRMWARES[@]}")
+            fi
+          fi
+
+          if [ "${#FW_LIST[@]}" -eq 0 ]; then
+            echo "::error::No firmware resolved from inputs.firmware or unica/configs/$CFG_NAME"
+            exit 1
+          fi
+
+          for fw in "${FW_LIST[@]}"; do
+            if ! [[ "$fw" =~ ^[^/]+/[A-Za-z0-9]{3}/[^/]+$ ]]; then
+              echo "::error::Invalid firmware format '$fw' (expected MODEL/CSC/IMEI_OR_SN)"
+              exit 1
+            fi
+          done
+
+          FIRST_MODEL="$(cut -d '/' -f 1 <<< "${FW_LIST[0]}")"
+          FIRST_CSC="$(cut -d '/' -f 2 <<< "${FW_LIST[0]}")"
+          echo "EXTRACT_FIRMWARES=${FW_LIST[*]}" >> "$GITHUB_ENV"
+          echo "BUNDLE_TAG=${FIRST_MODEL}_${FIRST_CSC}" >> "$GITHUB_ENV"
+          echo "Resolved firmwares: ${FW_LIST[*]}"
+
+      - name: Build dependencies
+        run: ./scripts/build_dependencies.sh
+
+      - name: Download stock firmwares
+        uses: nick-fields/retry@v4
+        env:
+          FORCE_FLAG: ${{ inputs.force }}
+        with:
+          timeout_minutes: 30
+          max_attempts: 3
+          command: |
+            bash -euo pipefail -c '
+              read -r -a FW_LIST <<< "$EXTRACT_FIRMWARES"
+              ARGS=(--ignore-source --ignore-target)
+              if [[ "${FORCE_FLAG:-false}" == "true" ]]; then
+                ARGS+=(--force)
+              fi
+              ./scripts/download_fw.sh "${ARGS[@]}" "${FW_LIST[@]}"
+            '
+
+      - name: Extract stock firmwares
+        env:
+          FORCE_FLAG: ${{ inputs.force }}
+        run: |
+          read -r -a FW_LIST <<< "$EXTRACT_FIRMWARES"
+          ARGS=(--ignore-source --ignore-target)
+          if [[ "${FORCE_FLAG:-false}" == "true" ]]; then
+            ARGS+=(--force)
+          fi
+          ./scripts/extract_fw.sh "${ARGS[@]}" "${FW_LIST[@]}"
+
+      - name: Collect APKs and UI assets
+        env:
+          BUNDLE_MODE: ${{ inputs.bundle_mode }}
+          EXTRA_PATTERNS: ${{ inputs.extra_patterns }}
+        run: |
+          BUNDLE_MODE="${BUNDLE_MODE:-ui-status-bar}"
+          STAGE_DIR="$TMP_DIR/apk_bundle_stage"
+          rm -rf "$STAGE_DIR"
+          mkdir -p "$STAGE_DIR"
+
+          python3 - "$FW_DIR" "$STAGE_DIR" "$EXTRACT_FIRMWARES" "$BUNDLE_MODE" "${EXTRA_PATTERNS:-}" <<'PY'
+          import os
+          import re
+          import shutil
+          import sys
+
+          fw_dir, stage_dir, fw_list_raw, bundle_mode, extra_raw = sys.argv[1:6]
+          extra_patterns = [p.strip().lower() for p in extra_raw.split(",") if p.strip()]
+
+          core_ui_re = re.compile(
+              r"(?:^|/)(?:"
+              r".*systemui.*|"
+              r"framework-res(?:\.apk)?|"
+              r"samsung-framework-res.*|"
+              r"sec_platform_library.*|"
+              r"framework\.jar|"
+              r"services\.jar|"
+              r"samsung-services\.jar|"
+              r"sem_[^/]*\.apk|"
+              r"secsettings[^/]*|"
+              r"aodservice[^/]*|"
+              r"alwaysondisplay[^/]*|"
+              r"themecenter[^/]*|"
+              r"themestore[^/]*|"
+              r"dynamiclock[^/]*|"
+              r"keyguard[^/]*|"
+              r"lockscreen[^/]*|"
+              r"clockpackage[^/]*|"
+              r"oneuihome[^/]*|"
+              r"seclauncher[^/]*|"
+              r"touchwizhome[^/]*|"
+              r"wallpaper[^/]*|"
+              r"freshwallpaper[^/]*|"
+              r"dressroom[^/]*|"
+              r"(?:samsung)?permissioncontroller[^/]*|"
+              r"intentresolver[^/]*|"
+              r"goodlock[^/]*|"
+              r"navstar[^/]*|"
+              r"quickstar[^/]*|"
+              r"statusbar[^/]*"
+              r")(?:/|$)",
+              re.IGNORECASE,
+          )
+
+          def should_include(rel_path: str) -> bool:
+              low = rel_path.lower()
+              parts = low.split("/")
+              if "oat" in parts or "prof" in parts:
+                  return False
+
+              base = os.path.basename(low)
+              if base in {".extracted", "os_partitions_metadata.txt", "build.prop", "default.prop", "floating_feature.xml"}:
+                  return True
+              if low.endswith("_metadata.txt") and "/" not in low:
+                  return True
+              if "/fonts/" in f"/{low}" and base.endswith((".ttf", ".otf", ".ttc")):
+                  return True
+              if "/etc/" in f"/{low}" and (base.startswith("fonts") or base.startswith("font_fallback")) and base.endswith(".xml"):
+                  return True
+              if "/etc/permissions/" in f"/{low}" and ("systemui" in base or "statusbar" in base or "samsung" in base) and base.endswith(".xml"):
+                  return True
+
+              if extra_patterns and any(pat in low for pat in extra_patterns):
+                  if base.endswith((".apk", ".jar", ".xml", ".prop", ".ttf", ".otf", ".ttc")):
+                      return True
+
+              if bundle_mode == "all-apks":
+                  return base.endswith((".apk", ".jar")) or "/framework/" in f"/{low}"
+
+              if "/overlay/" in f"/{low}" and base.endswith(".apk"):
+                  return True
+              if "/framework/" in f"/{low}" and base.endswith((".apk", ".jar")):
+                  if "framework" in base or "samsung" in base or "services" in base or "sec_" in base:
+                      return True
+              if base.endswith(".apk") and core_ui_re.search(low):
+                  return True
+              return False
+
+          total_copied = 0
+          total_bytes = 0
+
+          for fw in fw_list_raw.split():
+              model, csc = fw.split("/")[:2]
+              key = f"{model}_{csc}"
+              src_root = os.path.join(fw_dir, key)
+              if not os.path.isdir(src_root):
+                  raise SystemExit(f"Extracted firmware directory missing: {src_root}")
+
+              src_root_real = os.path.realpath(src_root)
+              dst_root = os.path.join(stage_dir, key)
+              os.makedirs(dst_root, exist_ok=True)
+
+              inventory = []
+              manifest = []
+              symlinks_log = []
+
+              for dirpath, dirnames, filenames in os.walk(src_root, followlinks=False):
+                  dirnames[:] = sorted(d for d in dirnames if d not in {"oat", "__pycache__"})
+                  for fname in sorted(filenames):
+                      full = os.path.join(dirpath, fname)
+                      rel = os.path.relpath(full, src_root).replace(os.sep, "/")
+                      low = rel.lower()
+
+                      if os.path.islink(full):
+                          target = os.readlink(full)
+                          symlinks_log.append(f"{rel} -> {target}")
+                          if not should_include(rel):
+                              continue
+                          resolved = os.path.realpath(full)
+                          if not (resolved == src_root_real or resolved.startswith(src_root_real + os.sep)):
+                              continue
+                          if not os.path.isfile(resolved):
+                              continue
+                          use_path = resolved
+                      elif os.path.isfile(full):
+                          use_path = full
+                      else:
+                          continue
+
+                      size = os.path.getsize(use_path)
+                      if (
+                          low.endswith((".apk", ".jar", ".apex", ".capex", ".ttf", ".otf", ".ttc"))
+                          or "/overlay/" in f"/{low}"
+                          or low.endswith(("build.prop", "floating_feature.xml"))
+                      ):
+                          inventory.append(f"{size:>12}  {rel}")
+
+                      if should_include(rel):
+                          dst = os.path.join(dst_root, rel)
+                          os.makedirs(os.path.dirname(dst), exist_ok=True)
+                          shutil.copy2(use_path, dst)
+                          manifest.append(f"{size:>12}  {rel}")
+                          total_copied += 1
+                          total_bytes += size
+
+              with open(os.path.join(dst_root, "file_inventory.txt"), "w", encoding="utf-8") as f:
+                  f.write("\n".join(inventory) + ("\n" if inventory else ""))
+              with open(os.path.join(dst_root, "bundle_manifest.txt"), "w", encoding="utf-8") as f:
+                  f.write("\n".join(manifest) + ("\n" if manifest else ""))
+              if symlinks_log:
+                  with open(os.path.join(dst_root, "symlinks.txt"), "w", encoding="utf-8") as f:
+                      f.write("\n".join(symlinks_log) + "\n")
+
+              print(f"[{key}] inventory={len(inventory)} bundled={len(manifest)} bytes={sum(int(x.split()[0]) for x in manifest)}")
+
+          if total_copied == 0:
+              raise SystemExit("No files collected into bundle!")
+          print(f"Total bundled files: {total_copied} ({total_bytes / (1024 * 1024):.2f} MiB uncompressed)")
+          PY
+
+          STAMP="$(date -u +%Y%m%d_%H%M%S)"
+          ZIP_NAME="UN1CA_APKs_${BUNDLE_TAG}_${BUNDLE_MODE}_${STAMP}.zip"
+          ZIP_PATH="$OUT_DIR/$ZIP_NAME"
+          rm -f "$ZIP_PATH"
+
+          (
+            cd "$STAGE_DIR"
+            zip -q -r -3 "$ZIP_PATH" .
+          )
+
+          ZIP_SIZE_BYTES="$(wc -c < "$ZIP_PATH")"
+          ZIP_SIZE_HR="$(du -h "$ZIP_PATH" | cut -f1)"
+          ZIP_MD5="$(md5sum "$ZIP_PATH" | awk '{print $1}')"
+          ZIP_SHA256="$(sha256sum "$ZIP_PATH" | awk '{print $1}')"
+
+          echo "ZIP_PATH=$ZIP_PATH" >> "$GITHUB_ENV"
+          echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_ENV"
+          echo "ZIP_SIZE_BYTES=$ZIP_SIZE_BYTES" >> "$GITHUB_ENV"
+          echo "ZIP_SIZE_HR=$ZIP_SIZE_HR" >> "$GITHUB_ENV"
+          echo "ZIP_MD5=$ZIP_MD5" >> "$GITHUB_ENV"
+          echo "ZIP_SHA256=$ZIP_SHA256" >> "$GITHUB_ENV"
+
+          echo "Created archive: $ZIP_PATH ($ZIP_SIZE_HR, MD5=$ZIP_MD5)"
+
+      - name: Upload to GoFile
+        env:
+          GOFILE_TOKEN: ${{ secrets.GOFILE_TOKEN }}
+          GOFILE_FOLDER_ID: ${{ secrets.GOFILE_FOLDER_ID }}
+          BUNDLE_MODE: ${{ inputs.bundle_mode }}
+        run: |
+          set -euo pipefail
+          if [ ! -f "$ZIP_PATH" ]; then
+            echo "::error::Archive not found at $ZIP_PATH"
+            exit 1
+          fi
+
+          SERVERS_JSON="$(curl -fsSL --retry 3 --retry-delay 3 https://api.gofile.io/servers || true)"
+          mapfile -t CANDIDATES < <(jq -r '.data.servers[]?.name // empty' <<< "$SERVERS_JSON" 2>/dev/null || true)
+          CANDIDATES+=("upload")
+
+          CURL_EXTRA=()
+          if [ -n "$GOFILE_TOKEN" ]; then
+            CURL_EXTRA+=(-F "token=${GOFILE_TOKEN}")
+          fi
+          if [ -n "$GOFILE_FOLDER_ID" ]; then
+            CURL_EXTRA+=(-F "folderId=${GOFILE_FOLDER_ID}")
+          fi
+
+          RESPONSE=""
+          UPLOADED=false
+          for SRV in "${CANDIDATES[@]}"; do
+            UPLOAD_URL="https://${SRV}.gofile.io/uploadFile"
+            echo "Trying GoFile upload server: $UPLOAD_URL"
+            if RESPONSE="$(curl -fsSL --retry 2 --retry-delay 5 \
+              -F "file=@${ZIP_PATH}" \
+              "${CURL_EXTRA[@]}" \
+              "$UPLOAD_URL")"; then
+              STATUS="$(jq -r '.status // empty' <<< "$RESPONSE" 2>/dev/null || true)"
+              if [[ "$STATUS" == "ok" ]]; then
+                UPLOADED=true
+                break
+              fi
+              echo "Unexpected response from $UPLOAD_URL: $RESPONSE"
+            fi
+          done
+
+          if ! $UPLOADED; then
+            echo "::error::Failed to upload archive to GoFile"
+            exit 1
+          fi
+
+          DOWNLOAD_URL="$(jq -r '.data.downloadPage // empty' <<< "$RESPONSE")"
+          DIRECT_LINK="$(jq -r '.data.directLink // empty' <<< "$RESPONSE")"
+          FILE_ID="$(jq -r '.data.fileId // .data.id // empty' <<< "$RESPONSE")"
+
+          echo "=============================================="
+          echo "File Name   : $ZIP_NAME"
+          echo "Size        : $ZIP_SIZE_HR ($ZIP_SIZE_BYTES bytes)"
+          echo "MD5         : $ZIP_MD5"
+          echo "SHA256      : $ZIP_SHA256"
+          echo "Firmwares   : $EXTRACT_FIRMWARES"
+          echo "GoFile URL  : $DOWNLOAD_URL"
+          [ -n "$DIRECT_LINK" ] && echo "Direct Link : $DIRECT_LINK"
+          [ -n "$FILE_ID" ] && echo "File ID     : $FILE_ID"
+          echo "=============================================="
+
+          {
+            echo "## Extracted Stock APKs Ready"
+            echo ""
+            echo "| Field | Value |"
+            echo "| :--- | :--- |"
+            echo "| **Firmwares** | \`$EXTRACT_FIRMWARES\` |"
+            echo "| **Bundle Mode** | \`${BUNDLE_MODE:-ui-status-bar}\` |"
+            echo "| **Archive** | \`$ZIP_NAME\` |"
+            echo "| **Size** | $ZIP_SIZE_HR (\`$ZIP_SIZE_BYTES\` bytes) |"
+            echo "| **MD5** | \`$ZIP_MD5\` |"
+            echo "| **SHA256** | \`$ZIP_SHA256\` |"
+            echo "| **GoFile Download** | $DOWNLOAD_URL |"
+            [ -n "$DIRECT_LINK" ] && echo "| **Direct Link** | $DIRECT_LINK |"
+          } >> "$GITHUB_STEP_SUMMARY"
