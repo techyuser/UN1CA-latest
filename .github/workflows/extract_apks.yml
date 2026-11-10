@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       firmware:
-        description: 'Firmware string (MODEL/CSC/IMEI, space or comma separated). Leave empty to read SOURCE_FIRMWARE (+ SOURCE_EXTRA_FIRMWARES) from config_file.'
+        description: 'Firmware string (MODEL/CSC/IMEI, space or comma separated). Leave empty to read extract_config.env or SOURCE_FIRMWARE from config_file.'
         required: false
         default: ''
         type: string
@@ -36,6 +36,13 @@ on:
         required: false
         default: false
         type: boolean
+  push:
+    branches:
+      - extract-apk
+    paths:
+      - 'unica/configs/**'
+      - 'extract_config.env'
+      - 's24_essi.sh'
 
 permissions:
   contents: read
@@ -46,7 +53,7 @@ concurrency:
 
 jobs:
   extract:
-    name: Extract APKs (${{ inputs.firmware || inputs.config_file || 'essi.sh' }})
+    name: Extract APKs (${{ inputs.firmware || github.ref_name }})
     runs-on: ubuntu-24.04
     timeout-minutes: 90
 
@@ -93,10 +100,30 @@ jobs:
 
       - name: Generate build config
         env:
-          TARGET_CFG: ${{ inputs.target }}
+          IN_TARGET: ${{ inputs.target }}
         run: |
+          TARGET_CFG="${IN_TARGET:-}"
+          if [ -z "$TARGET_CFG" ] && [ -f "./extract_config.env" ]; then
+            # shellcheck disable=SC1091
+            source "./extract_config.env"
+            TARGET_CFG="${TARGET:-}"
+          fi
           [ -z "$TARGET_CFG" ] && TARGET_CFG="r9s"
-          source ./buildenv.sh "$TARGET_CFG"
+
+          if ! source ./buildenv.sh "$TARGET_CFG"; then
+            echo "Warning: buildenv.sh failed (custom source config); using standard UN1CA directory layout"
+            export DEBUG=false
+            export SRC_DIR="$PWD"
+            export OUT_DIR="$SRC_DIR/out"
+            export ODIN_DIR="$OUT_DIR/odin"
+            export FW_DIR="$OUT_DIR/fw"
+            export TOOLS_DIR="$OUT_DIR/tools"
+            export APKTOOL_DIR="$OUT_DIR/apktool"
+            export WORK_DIR="$OUT_DIR/work"
+            export TMP_DIR="$OUT_DIR/tmp"
+            mkdir -p "$OUT_DIR" "$ODIN_DIR" "$FW_DIR" "$TOOLS_DIR/bin" "$TMP_DIR"
+          fi
+
           {
             echo "DEBUG=$DEBUG"
             echo "SRC_DIR=$SRC_DIR"
@@ -108,24 +135,58 @@ jobs:
             echo "WORK_DIR=$WORK_DIR"
             echo "TMP_DIR=$TMP_DIR"
           } >> "$GITHUB_ENV"
-          sed -e "/Automatically/d" -e "s/\"//g" "$OUT_DIR/config.sh" >> "$GITHUB_ENV"
+          if [ -f "$OUT_DIR/config.sh" ]; then
+            sed -e "/Automatically/d" -e "s/\"//g" "$OUT_DIR/config.sh" >> "$GITHUB_ENV"
+          fi
           echo "$TOOLS_DIR/bin" >> "$GITHUB_PATH"
 
-      - name: Resolve firmware list
+      - name: Resolve firmware list and options
         env:
-          RAW_FW: ${{ inputs.firmware }}
-          CFG_NAME: ${{ inputs.config_file }}
+          IN_FW: ${{ inputs.firmware }}
+          IN_CFG: ${{ inputs.config_file }}
+          IN_MODE: ${{ inputs.bundle_mode }}
+          IN_EXTRA: ${{ inputs.extra_patterns }}
+          IN_FORCE: ${{ inputs.force }}
         run: |
-          [ -z "$CFG_NAME" ] && CFG_NAME="essi.sh"
+          RAW_FW="${IN_FW:-}"
+          CFG_NAME="${IN_CFG:-}"
+          BUNDLE_MODE="${IN_MODE:-}"
+          EXTRA_PATTERNS="${IN_EXTRA:-}"
+          FORCE_FLAG="${IN_FORCE:-}"
+
+          if [ -f "$SRC_DIR/extract_config.env" ]; then
+            FIRMWARE=""
+            CONFIG_FILE=""
+            BUNDLE_MODE=""
+            EXTRA_PATTERNS=""
+            FORCE=""
+            # shellcheck disable=SC1091
+            source "$SRC_DIR/extract_config.env"
+            RAW_FW="${IN_FW:-${FIRMWARE:-}}"
+            CFG_NAME="${IN_CFG:-${CONFIG_FILE:-}}"
+            BUNDLE_MODE="${IN_MODE:-${BUNDLE_MODE:-}}"
+            EXTRA_PATTERNS="${IN_EXTRA:-${EXTRA_PATTERNS:-}}"
+            FORCE_FLAG="${IN_FORCE:-${FORCE:-}}"
+          fi
+
+          [ -z "$BUNDLE_MODE" ] && BUNDLE_MODE="ui-status-bar"
+          [ -z "$FORCE_FLAG" ] && FORCE_FLAG="false"
 
           FW_LIST=()
           if [ -n "$RAW_FW" ]; then
             RAW_FW="${RAW_FW//,/ }"
             read -r -a FW_LIST <<< "$RAW_FW"
           else
-            CFG_PATH="$SRC_DIR/unica/configs/$CFG_NAME"
+            if [ -n "$CFG_NAME" ]; then
+              CFG_PATH="$SRC_DIR/unica/configs/$CFG_NAME"
+            elif [ -f "$SRC_DIR/s24_essi.sh" ]; then
+              CFG_PATH="$SRC_DIR/s24_essi.sh"
+            else
+              CFG_PATH="$SRC_DIR/unica/configs/essi.sh"
+            fi
+
             if [ ! -f "$CFG_PATH" ]; then
-              echo "::error::Config file not found: unica/configs/$CFG_NAME"
+              echo "::error::Config file not found: $CFG_PATH"
               exit 1
             fi
             SOURCE_FIRMWARE=""
@@ -141,7 +202,7 @@ jobs:
           fi
 
           if [ "${#FW_LIST[@]}" -eq 0 ]; then
-            echo "::error::No firmware resolved from inputs.firmware or unica/configs/$CFG_NAME"
+            echo "::error::No firmware resolved from inputs, extract_config.env, or config file"
             exit 1
           fi
 
@@ -154,17 +215,20 @@ jobs:
 
           FIRST_MODEL="$(cut -d '/' -f 1 <<< "${FW_LIST[0]}")"
           FIRST_CSC="$(cut -d '/' -f 2 <<< "${FW_LIST[0]}")"
-          echo "EXTRACT_FIRMWARES=${FW_LIST[*]}" >> "$GITHUB_ENV"
-          echo "BUNDLE_TAG=${FIRST_MODEL}_${FIRST_CSC}" >> "$GITHUB_ENV"
-          echo "Resolved firmwares: ${FW_LIST[*]}"
+          {
+            echo "EXTRACT_FIRMWARES=${FW_LIST[*]}"
+            echo "BUNDLE_TAG=${FIRST_MODEL}_${FIRST_CSC}"
+            echo "BUNDLE_MODE=$BUNDLE_MODE"
+            echo "EXTRA_PATTERNS=$EXTRA_PATTERNS"
+            echo "FORCE_FLAG=$FORCE_FLAG"
+          } >> "$GITHUB_ENV"
+          echo "Resolved firmwares: ${FW_LIST[*]} (mode=$BUNDLE_MODE force=$FORCE_FLAG)"
 
       - name: Build dependencies
         run: ./scripts/build_dependencies.sh
 
       - name: Download stock firmwares
         uses: nick-fields/retry@v4
-        env:
-          FORCE_FLAG: ${{ inputs.force }}
         with:
           timeout_minutes: 30
           max_attempts: 3
@@ -179,8 +243,6 @@ jobs:
             '
 
       - name: Extract stock firmwares
-        env:
-          FORCE_FLAG: ${{ inputs.force }}
         run: |
           read -r -a FW_LIST <<< "$EXTRACT_FIRMWARES"
           ARGS=(--ignore-source --ignore-target)
@@ -190,9 +252,6 @@ jobs:
           ./scripts/extract_fw.sh "${ARGS[@]}" "${FW_LIST[@]}"
 
       - name: Collect APKs and UI assets
-        env:
-          BUNDLE_MODE: ${{ inputs.bundle_mode }}
-          EXTRA_PATTERNS: ${{ inputs.extra_patterns }}
         run: |
           BUNDLE_MODE="${BUNDLE_MODE:-ui-status-bar}"
           STAGE_DIR="$TMP_DIR/apk_bundle_stage"
@@ -364,12 +423,14 @@ jobs:
           ZIP_MD5="$(md5sum "$ZIP_PATH" | awk '{print $1}')"
           ZIP_SHA256="$(sha256sum "$ZIP_PATH" | awk '{print $1}')"
 
-          echo "ZIP_PATH=$ZIP_PATH" >> "$GITHUB_ENV"
-          echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_ENV"
-          echo "ZIP_SIZE_BYTES=$ZIP_SIZE_BYTES" >> "$GITHUB_ENV"
-          echo "ZIP_SIZE_HR=$ZIP_SIZE_HR" >> "$GITHUB_ENV"
-          echo "ZIP_MD5=$ZIP_MD5" >> "$GITHUB_ENV"
-          echo "ZIP_SHA256=$ZIP_SHA256" >> "$GITHUB_ENV"
+          {
+            echo "ZIP_PATH=$ZIP_PATH"
+            echo "ZIP_NAME=$ZIP_NAME"
+            echo "ZIP_SIZE_BYTES=$ZIP_SIZE_BYTES"
+            echo "ZIP_SIZE_HR=$ZIP_SIZE_HR"
+            echo "ZIP_MD5=$ZIP_MD5"
+            echo "ZIP_SHA256=$ZIP_SHA256"
+          } >> "$GITHUB_ENV"
 
           echo "Created archive: $ZIP_PATH ($ZIP_SIZE_HR, MD5=$ZIP_MD5)"
 
@@ -377,7 +438,6 @@ jobs:
         env:
           GOFILE_TOKEN: ${{ secrets.GOFILE_TOKEN }}
           GOFILE_FOLDER_ID: ${{ secrets.GOFILE_FOLDER_ID }}
-          BUNDLE_MODE: ${{ inputs.bundle_mode }}
         run: |
           set -euo pipefail
           if [ ! -f "$ZIP_PATH" ]; then
