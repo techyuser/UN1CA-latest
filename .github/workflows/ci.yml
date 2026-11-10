@@ -126,6 +126,8 @@ jobs:
         run: ./scripts/extract_fw.sh
 
       - name: Build ROM
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           source ./buildenv.sh ${{ matrix.target }}
           ./scripts/make_rom.sh --build-rom-zip
