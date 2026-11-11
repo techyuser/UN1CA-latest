@@ -1,0 +1,101 @@
+name: Build Nexmon BCM4375B1 + Mosey Shim
+
+on:
+  push:
+    branches:
+      - nexmon-airdrop-build
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Nexmon 18_41_117_sta & AArch64 Tools
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (32-bit toolchain + nexmon deps)
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential git gawk qpdf vim-common flex bison \
+            libgmp-dev libmpfr-dev libmpc-dev libisl-dev libssl-dev \
+            bc zlib1g-dev libtool-bin autoconf pkg-config \
+            libc6:i386 libstdc++6:i386 zlib1g:i386 libncurses5:i386 g++-multilib
+
+      - name: Clone 0xIO32/nexmon PR #663 (18_41_117_sta)
+        run: |
+          git clone --depth=1 -b bcm4375b1_18_41_117_patch https://github.com/0xIO32/nexmon.git nexmon
+          cd nexmon
+          git rev-parse HEAD
+          sha256sum firmwares/bcm4375b1/18_41_117_sta/bcmdhd_sta.bin_b1
+
+      - name: Build flash_patch_extractor & extract firmware tables
+        run: |
+          cd nexmon
+          bash -c '
+            set -e
+            source setup_env.sh
+            "$CC"gcc --version
+            echo "Testing prebuilt nexmon.so plugin..."
+            if ! "${CC}gcc" -fplugin="$CCPLUGIN" -c -x c /dev/null -o /tmp/test_plug.o 2>/dev/null; then
+              echo "Rebuilding gcc-nexmon-plugin..."
+              make -C buildtools/gcc-nexmon-plugin clean
+              make -C buildtools/gcc-nexmon-plugin
+            fi
+            make -C buildtools/flash_patch_extractor
+            make -C firmwares/bcm4375b1/18_41_117_sta
+            make -C patches/bcm4375b1/18_41_117_sta/nexmon
+            ls -lh patches/bcm4375b1/18_41_117_sta/nexmon/bcmdhd_sta.bin_b1
+            sha256sum patches/bcm4375b1/18_41_117_sta/nexmon/bcmdhd_sta.bin_b1
+          '
+
+      - name: Build aarch64 NDK binaries (nexutil, rf_test, libmosey_nexmon_shim.so)
+        run: |
+          NDK="${ANDROID_NDK_LATEST_HOME:-${ANDROID_NDK_HOME:-}}"
+          if [ -z "$NDK" ] || [ ! -d "$NDK" ]; then
+            NDK="$(ls -d /usr/local/lib/android/sdk/ndk/* 2>/dev/null | sort -V | tail -n 1)"
+          fi
+          echo "Using NDK=$NDK"
+          export NDK_ROOT="$NDK"
+          CLANG="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android31-clang"
+          "$CLANG" --version
+
+          # Build nexutil + deps via ndk-build matching Makefile NDK_APP_OUT=.
+          (cd nexmon/utilities/libargp && "$NDK/ndk-build" NDK_APPLICATION_MK="$PWD/Application.mk" NDK_APP_OUT=. APP_ABI=arm64-v8a APP_PLATFORM=android-31)
+          (cd nexmon/utilities/libnexio && "$NDK/ndk-build" NDK_APPLICATION_MK="$PWD/Application.mk" NDK_APP_OUT=. APP_ABI=arm64-v8a APP_PLATFORM=android-31)
+          (cd nexmon/utilities/nexutil && "$NDK/ndk-build" NDK_APPLICATION_MK="$PWD/Application.mk" NDK_APP_OUT=. APP_ABI=arm64-v8a APP_PLATFORM=android-31 GIT_VERSION="pr663")
+
+          mkdir -p dist build_tmp
+          cp nexmon/patches/bcm4375b1/18_41_117_sta/nexmon/bcmdhd_sta.bin_b1 dist/
+          cp nexmon/utilities/nexutil/libs/arm64-v8a/nexutil dist/
+
+          INC="-Inexmon/utilities/nexutil/include -Inexmon/patches/include -DD11AC_IOTYPES -DCHANSPEC_NEW_40MHZ_FORMAT"
+          # Precompile Broadcom helpers without -Werror
+          "$CLANG" -O2 -fPIC -fPIE -w $INC -c nexmon/utilities/nexutil/bcmutils.c -o build_tmp/bcmutils.o
+          "$CLANG" -O2 -fPIC -fPIE -w $INC -c nexmon/utilities/nexutil/bcmwifi_channels.c -o build_tmp/bcmwifi_channels.o
+
+          # Build rf_test
+          "$CLANG" -O2 -Wall -Werror -pie -fPIE \
+            $INC \
+            src/rf_test.c build_tmp/bcmutils.o build_tmp/bcmwifi_channels.o \
+            -o dist/rf_test
+
+          # Build libmosey_nexmon_shim.so
+          "$CLANG" -O2 -Wall -Werror -shared -fPIC \
+            $INC \
+            src/libmosey_nexmon_shim.c build_tmp/bcmutils.o build_tmp/bcmwifi_channels.o \
+            -ldl -llog \
+            -o dist/libmosey_nexmon_shim.so
+
+          ls -lh dist/
+          sha256sum dist/*
+
+      - name: Upload built artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexmon-bcm4375b1-mosey-arm64
+          path: dist/
+          retention-days: 7
