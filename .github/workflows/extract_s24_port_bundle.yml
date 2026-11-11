@@ -261,6 +261,7 @@ jobs:
               r".*cocktail[^/]*|.*edge[^/]*|.*taskedge.*|.*clipboardedge.*|"
               r".*screencapture.*|.*smartcapture.*|.*callassistant.*|.*smartcall.*|"
               r".*smartthings[^/]*|.*mcfdevicesync.*|.*multicontrol.*|.*smartmirroring.*|.*smartmanager.*|"
+              r".*sharelive[^/]*|.*allshare[^/]*|.*quickshare[^/]*|.*storageshare.*|.*hwresourceshare.*|.*samsungmulticonnectivity.*|"
               r".*bixby[^/]*|.*mediacontrol.*|.*soundpicker.*|"
               r".*soundalive.*|.*adaptsound.*|.*volumemonitor.*|.*multisound.*|.*audiomirroring.*|"
               r".*budsunite.*|.*scone.*"
