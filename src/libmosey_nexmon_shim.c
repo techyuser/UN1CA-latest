@@ -247,6 +247,7 @@ static int handle_art_ioctl(struct ifreq *ifr) {
             pthread_mutex_unlock(&io_lock);
             return 0;
         }
+        ALOGE("ART_GET_IF_ADDR SIOCGIFHWADDR failed: errno=%d", errno);
         pthread_mutex_unlock(&io_lock);
         return -1;
     }
@@ -278,14 +279,17 @@ static int handle_art_ioctl(struct ifreq *ifr) {
 
     if (strncmp(priv->buf, "ART_BSSID", 9) == 0 ||
         strncmp(priv->buf, "ART_TX_RATE", 11) == 0 ||
-        strncmp(priv->buf, "ART_", 4) == 0) {
-        ALOGI("ART stubbed cmd: %.48s", priv->buf);
+        strncmp(priv->buf, "ART_", 4) == 0 ||
+        strncmp(priv->buf, "COUNTRY", 7) == 0) {
+        ALOGI("ART priv cmd stubbed: %.48s", priv->buf);
         snprintf(priv->buf, priv->total_len, "OK");
         priv->used_len = 2;
         pthread_mutex_unlock(&io_lock);
         return 0;
     }
 
+    ALOGE("ART unknown cmd: %.48s (used=%u total=%u)",
+          priv->buf, priv->used_len, priv->total_len);
     pthread_mutex_unlock(&io_lock);
     errno = EOPNOTSUPP;
     return -1;
@@ -381,13 +385,25 @@ int close(int fd) {
     ensure_init();
     if (fd >= 0 && fd < MAX_TRACKED_FDS) {
         int was_tun = fd_is_mosey_tun[fd];
+        int was_mon = fd_is_mon_bound[fd];
         fd_is_sock_raw[fd] = 0;
         fd_is_mon_bound[fd] = 0;
         fd_is_mosey_tun[fd] = 0;
-        if (was_tun) {
-            pthread_mutex_lock(&io_lock);
-            cleanup_mon_locked();
-            pthread_mutex_unlock(&io_lock);
+        if (was_tun || was_mon) {
+            int still_active = 0;
+            for (int i = 0; i < MAX_TRACKED_FDS; i++) {
+                if (fd_is_mosey_tun[i] || fd_is_mon_bound[i]) {
+                    still_active = 1;
+                    break;
+                }
+            }
+            if (!still_active) {
+                pthread_mutex_lock(&io_lock);
+                if (cached_mon_active) {
+                    cleanup_mon_locked();
+                }
+                pthread_mutex_unlock(&io_lock);
+            }
         }
     }
     return real_close(fd);
@@ -467,6 +483,12 @@ int ioctl(int fd, int request, ...) {
             }
             int rc = real_ioctl(fd, request, &tmp);
             if (rc == 0) {
+                if (req == SIOCSIFFLAGS && is_w0 && !(tmp.ifr_flags & IFF_UP)) {
+                    pthread_mutex_lock(&io_lock);
+                    cached_mon_active = 0;
+                    cached_chanspec = 0;
+                    pthread_mutex_unlock(&io_lock);
+                }
                 memcpy(ifr, &tmp, sizeof(tmp));
                 if (is_rt) {
                     memset(ifr->ifr_name, 0, IFNAMSIZ);
