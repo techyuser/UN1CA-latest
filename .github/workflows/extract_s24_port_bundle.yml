@@ -261,6 +261,7 @@ jobs:
               r".*cocktail[^/]*|.*edge[^/]*|.*taskedge.*|.*clipboardedge.*|"
               r".*screencapture.*|.*smartcapture.*|.*callassistant.*|.*smartcall.*|"
               r".*smartthings[^/]*|.*mcfdevicesync.*|.*multicontrol.*|.*smartmirroring.*|.*smartmanager.*|"
+              r".*mosey[^/]*|.*wonder[^/]*|.*awdl[^/]*|"
               r".*sharelive[^/]*|.*allshare[^/]*|.*quickshare[^/]*|.*storageshare.*|.*hwresourceshare.*|.*samsungmulticonnectivity.*|"
               r".*bixby[^/]*|.*mediacontrol.*|.*soundpicker.*|"
               r".*soundalive.*|.*adaptsound.*|.*volumemonitor.*|.*multisound.*|.*audiomirroring.*|"
@@ -273,6 +274,7 @@ jobs:
               "wallpaperfilter", "facepreprocessing", "smart_cropping", "blur", "agsl",
               "visualeffect", "multisource", "sourceseparator", "eraser", "soundalive",
               "libsound", "libaudio", "saiv", "hwui", "renderengine",
+              "mosey", "wonder", "awdl", "aware", "nearby", "nan",
           )
 
           def include_s24(rel: str) -> bool:
@@ -313,11 +315,17 @@ jobs:
                   return True
               if "/etc/" in f"/{low}" and (base.startswith(("fonts", "font_fallback", "audio", "media")) or "/permissions/" in f"/{low}" or "/sysconfig/" in f"/{low}") and base.endswith((".xml", ".conf", ".json")):
                   return True
+              if ("/etc/init/" in f"/{low}" or "/etc/selinux/" in f"/{low}") and any(k in low for k in ("mosey", "wonder", "sharelive", "aware", "awdl", "seapp_contexts", "sepolicy", "file_contexts")):
+                  return True
+              if "/bin/" in f"/{low}" and any(k in base for k in ("mosey", "wonder", "awdl")):
+                  return True
+              if "/lib/modules/" in f"/{low}" and base.endswith(".ko") and any(k in base for k in ("wonder", "bcmdhd", "wlan", "wifi", "dhd")):
+                  return True
               if "/overlay/" in f"/{low}" and base.endswith(".apk"):
                   return True
               if "/framework/" in f"/{low}" and base.endswith((".apk", ".jar")):
                   return True
-              if any(p in f"/{low}" for p in ("/system/", "/system_ext/", "/product/")) and ("/lib/" in f"/{low}" or "/lib64/" in f"/{low}") and base.endswith(".so"):
+              if any(p in f"/{low}" for p in ("/system/", "/system_ext/", "/product/", "/vendor/")) and ("/lib/" in f"/{low}" or "/lib64/" in f"/{low}") and base.endswith(".so"):
                   if port_pkg_re.search(low) or any(k in base for k in lib_kw):
                       return True
               if port_pkg_re.search(low) and (base.endswith((".apk", ".so")) or ("/lib/" in f"/{low}" and base.endswith(".so"))):
@@ -333,6 +341,10 @@ jobs:
               if base in {".extracted", "os_partitions_metadata.txt", "build.prop", "default.prop", "floating_feature.xml"}:
                   return True
               if "/etc/" in f"/{low}" and (base.startswith(("fonts", "font_fallback", "audio", "media")) or "/permissions/" in f"/{low}" or "/sysconfig/" in f"/{low}") and base.endswith((".xml", ".conf", ".json")):
+                  return True
+              if ("/etc/init/" in f"/{low}" or "/etc/selinux/" in f"/{low}" or "/etc/wifi/" in f"/{low}") and any(k in low for k in ("mosey", "wonder", "sharelive", "aware", "awdl", "seapp_contexts", "sepolicy", "file_contexts", "wifi", "bcmdhd")):
+                  return True
+              if "/lib/modules/" in f"/{low}" and base.endswith(".ko") and any(k in base for k in ("wonder", "bcmdhd", "wlan", "wifi", "dhd")):
                   return True
               if "/overlay/" in f"/{low}" and base.endswith(".apk"):
                   return True
