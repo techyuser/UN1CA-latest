@@ -44,6 +44,9 @@
 #ifndef SIOCSHWTSTAMP
 #define SIOCSHWTSTAMP 0x89b0
 #endif
+#ifndef TUNSETIFF_IOCTL
+#define TUNSETIFF_IOCTL 0x400454cau
+#endif
 
 extern uint16_t wf_chspec_aton(const char *a);
 
@@ -73,11 +76,11 @@ struct android_wifi_priv_cmd {
 #define MAX_TRACKED_FDS 4096
 static uint8_t fd_is_sock_raw[MAX_TRACKED_FDS];
 static uint8_t fd_is_mon_bound[MAX_TRACKED_FDS];
+static uint8_t fd_is_mosey_tun[MAX_TRACKED_FDS];
 
 static pthread_once_t init_once = PTHREAD_ONCE_INIT;
 static pthread_mutex_t io_lock = PTHREAD_MUTEX_INITIALIZER;
 static int cached_ioc_fd = -1;
-static int cached_wlan_up = 0;
 static uint16_t cached_chanspec = 0;
 static int cached_mon_active = 0;
 static atomic_uint tx_count = 0;
@@ -155,24 +158,36 @@ static int wl_iovar_set_int_locked(const char *name, uint32_t val) {
 }
 
 static void ensure_wlan0_up_locked(void) {
-    if (cached_wlan_up) return;
     int s = get_ioc_fd_locked();
     if (s < 0) return;
     struct ifreq ifr;
     memset(&ifr, 0, sizeof(ifr));
     snprintf(ifr.ifr_name, IFNAMSIZ, "wlan0");
-    if (real_ioctl(s, SIOCGIFFLAGS, &ifr) == 0) {
-        if ((ifr.ifr_flags & IFF_UP) == 0) {
-            ifr.ifr_flags |= IFF_UP | IFF_RUNNING;
-            if (real_ioctl(s, SIOCSIFFLAGS, &ifr) < 0) {
-                ALOGE("SIOCSIFFLAGS(wlan0 UP) failed: errno=%d", errno);
-            }
+    if (real_ioctl(s, SIOCGIFFLAGS, &ifr) == 0 && (ifr.ifr_flags & IFF_UP) == 0) {
+        ifr.ifr_flags |= IFF_UP | IFF_RUNNING;
+        if (real_ioctl(s, SIOCSIFFLAGS, &ifr) < 0) {
+            ALOGE("SIOCSIFFLAGS(wlan0 UP) failed: errno=%d", errno);
+            return;
         }
+        /* Re-entering UP after daemon downed wlan0 resets firmware monitor/power state */
+        cached_mon_active = 0;
+        cached_chanspec = 0;
+        wl_iovar_set_int_locked("mpc", 0);
+        wl_iovar_set_int_locked("scansuppress", 1);
+        ALOGI("wlan0 brought UP for monitor/injection");
     }
-    wl_iovar_set_int_locked("mpc", 0);
-    wl_iovar_set_int_locked("scansuppress", 1);
-    cached_wlan_up = 1;
-    ALOGI("wlan0 prepared for monitor/injection");
+}
+
+static void cleanup_mon_locked(void) {
+    if (cached_mon_active) {
+        uint32_t mode = 0;
+        nex_ioctl_locked(NEX_SET_MON_613, &mode, sizeof(mode), 1);
+    }
+    wl_iovar_set_int_locked("scansuppress", 0);
+    wl_iovar_set_int_locked("mpc", 1);
+    cached_mon_active = 0;
+    cached_chanspec = 0;
+    ALOGI("wlan0 monitor/injection state restored");
 }
 
 static void ensure_mon_active_locked(int force) {
@@ -242,18 +257,18 @@ static int handle_art_ioctl(struct ifreq *ifr) {
         if (cidx < 10) ALOGI("%s -> cs=0x%04x", priv->buf, cs);
         int rc = 0;
         if (cs != 0 && cs != cached_chanspec) {
+            wl_iovar_set_int_locked("mpc", 0);
+            wl_iovar_set_int_locked("scansuppress", 1);
             rc = wl_iovar_set_int_locked("chanspec", (uint32_t)cs);
             if (rc == 0) {
-                uint8_t prev_is_2g = (cached_chanspec != 0) && ((cached_chanspec & 0xc000u) == 0);
-                uint8_t next_is_2g = ((cs & 0xc000u) == 0);
-                /* RSDB core changes across 2G/5G: re-apply 0x613 to bind monitor to the active core */
-                if (!cached_mon_active || prev_is_2g != next_is_2g || cached_chanspec == 0) {
-                    ensure_mon_active_locked(1);
-                }
+                /* Always ensure 0x613=2 binds monitor to the active RSDB core */
+                ensure_mon_active_locked(1);
                 cached_chanspec = cs;
             } else {
                 ALOGE("chanspec 0x%04x failed: errno=%d", cs, errno);
             }
+        } else {
+            ensure_mon_active_locked(0);
         }
         snprintf(priv->buf, priv->total_len, "OK");
         priv->used_len = 2;
@@ -338,6 +353,7 @@ int socket(int domain, int type, int protocol) {
     if (fd >= 0 && fd < MAX_TRACKED_FDS) {
         fd_is_sock_raw[fd] = (domain == AF_PACKET && (type & 0xf) == SOCK_RAW) ? 1 : 0;
         fd_is_mon_bound[fd] = 0;
+        fd_is_mosey_tun[fd] = 0;
     }
     return fd;
 }
@@ -364,8 +380,15 @@ int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
 int close(int fd) {
     ensure_init();
     if (fd >= 0 && fd < MAX_TRACKED_FDS) {
+        int was_tun = fd_is_mosey_tun[fd];
         fd_is_sock_raw[fd] = 0;
         fd_is_mon_bound[fd] = 0;
+        fd_is_mosey_tun[fd] = 0;
+        if (was_tun) {
+            pthread_mutex_lock(&io_lock);
+            cleanup_mon_locked();
+            pthread_mutex_unlock(&io_lock);
+        }
     }
     return real_close(fd);
 }
@@ -376,6 +399,7 @@ int dup(int oldfd) {
     if (nfd >= 0 && nfd < MAX_TRACKED_FDS) {
         fd_is_sock_raw[nfd] = (oldfd >= 0 && oldfd < MAX_TRACKED_FDS) ? fd_is_sock_raw[oldfd] : 0;
         fd_is_mon_bound[nfd] = (oldfd >= 0 && oldfd < MAX_TRACKED_FDS) ? fd_is_mon_bound[oldfd] : 0;
+        fd_is_mosey_tun[nfd] = (oldfd >= 0 && oldfd < MAX_TRACKED_FDS) ? fd_is_mosey_tun[oldfd] : 0;
     }
     return nfd;
 }
@@ -386,6 +410,7 @@ int dup2(int oldfd, int newfd) {
     if (rc >= 0 && newfd >= 0 && newfd < MAX_TRACKED_FDS) {
         fd_is_sock_raw[newfd] = (oldfd >= 0 && oldfd < MAX_TRACKED_FDS) ? fd_is_sock_raw[oldfd] : 0;
         fd_is_mon_bound[newfd] = (oldfd >= 0 && oldfd < MAX_TRACKED_FDS) ? fd_is_mon_bound[oldfd] : 0;
+        fd_is_mosey_tun[newfd] = (oldfd >= 0 && oldfd < MAX_TRACKED_FDS) ? fd_is_mosey_tun[oldfd] : 0;
     }
     return rc;
 }
@@ -396,6 +421,7 @@ int dup3(int oldfd, int newfd, int flags) {
     if (rc >= 0 && newfd >= 0 && newfd < MAX_TRACKED_FDS) {
         fd_is_sock_raw[newfd] = (oldfd >= 0 && oldfd < MAX_TRACKED_FDS) ? fd_is_sock_raw[oldfd] : 0;
         fd_is_mon_bound[newfd] = (oldfd >= 0 && oldfd < MAX_TRACKED_FDS) ? fd_is_mon_bound[oldfd] : 0;
+        fd_is_mosey_tun[newfd] = (oldfd >= 0 && oldfd < MAX_TRACKED_FDS) ? fd_is_mosey_tun[oldfd] : 0;
     }
     return rc;
 }
@@ -412,18 +438,40 @@ int ioctl(int fd, int request, ...) {
         return handle_art_ioctl((struct ifreq *)argp);
     }
 
+    if (req == TUNSETIFF_IOCTL && argp && fd >= 0 && fd < MAX_TRACKED_FDS) {
+        int rc = real_ioctl(fd, request, argp);
+        if (rc == 0) {
+            struct ifreq *ifr = (struct ifreq *)argp;
+            if (strncmp(ifr->ifr_name, "mosey", 5) == 0) {
+                fd_is_mosey_tun[fd] = 1;
+            }
+        }
+        return rc;
+    }
+
     if (argp && is_radiotap_ifname_input_ioctl(req)) {
         struct ifreq *ifr = (struct ifreq *)argp;
-        if (strncmp(ifr->ifr_name, "radiotap0", IFNAMSIZ) == 0) {
+        int is_rt = (strncmp(ifr->ifr_name, "radiotap0", IFNAMSIZ) == 0);
+        int is_w0 = (strncmp(ifr->ifr_name, "wlan0", IFNAMSIZ) == 0);
+        if (is_rt || is_w0) {
+            if (req == SIOCGIFHWADDR) {
+                pthread_mutex_lock(&io_lock);
+                ensure_mon_active_locked(0);
+                pthread_mutex_unlock(&io_lock);
+            }
             struct ifreq tmp;
             memcpy(&tmp, ifr, sizeof(tmp));
-            memset(tmp.ifr_name, 0, IFNAMSIZ);
-            memcpy(tmp.ifr_name, "wlan0", 6);
+            if (is_rt) {
+                memset(tmp.ifr_name, 0, IFNAMSIZ);
+                memcpy(tmp.ifr_name, "wlan0", 6);
+            }
             int rc = real_ioctl(fd, request, &tmp);
             if (rc == 0) {
                 memcpy(ifr, &tmp, sizeof(tmp));
-                memset(ifr->ifr_name, 0, IFNAMSIZ);
-                memcpy(ifr->ifr_name, "radiotap0", 10);
+                if (is_rt) {
+                    memset(ifr->ifr_name, 0, IFNAMSIZ);
+                    memcpy(ifr->ifr_name, "radiotap0", 10);
+                }
                 if (req == SIOCGIFHWADDR) {
                     ifr->ifr_hwaddr.sa_family = ARPHRD_IEEE80211_RADIOTAP;
                 }
