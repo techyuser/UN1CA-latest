@@ -1,0 +1,5 @@
+id=livealerts
+name=One UI 9 Status Bar + OxygenOS 16 Live Alerts
+author=Aditya Singh
+description=Ports One UI 9.0 status bar drawables and dimens, and injects pure OxygenOS 16 Fluid Glass Live Alerts with live Settings tuning into SystemUI.
+

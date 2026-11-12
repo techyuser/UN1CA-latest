@@ -1,0 +1,3 @@
+/StatusBarNotificationSettings/a
+        <SecPreferenceScreen android:title="@string/unica_live_alerts_title" android:key="live_alerts_settings" android:summary="@string/summary_placeholder" android:fragment="io.mesalabs.unica.settings.ui.LiveAlertsSettingsFragment" settings:controller="io.mesalabs.unica.settings.ui.LiveAlertsEntryPreferenceController" />
+

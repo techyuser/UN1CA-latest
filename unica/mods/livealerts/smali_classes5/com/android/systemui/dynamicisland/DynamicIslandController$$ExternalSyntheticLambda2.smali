@@ -1,0 +1,42 @@
+.class public final synthetic Lcom/android/systemui/dynamicisland/DynamicIslandController$$ExternalSyntheticLambda2;
+.super Ljava/lang/Object;
+.source "D8$$SyntheticClass"
+
+# interfaces
+.implements Ljava/lang/Runnable;
+
+
+# instance fields
+.field public final synthetic f$0:Lcom/android/systemui/dynamicisland/DynamicIslandController;
+
+.field public final synthetic f$1:Landroid/service/notification/StatusBarNotification;
+
+
+# direct methods
+.method public synthetic constructor <init>(Lcom/android/systemui/dynamicisland/DynamicIslandController;Landroid/service/notification/StatusBarNotification;)V
+    .locals 0
+
+    .line 0
+    invoke-direct {p0}, Ljava/lang/Object;-><init>()V
+
+    iput-object p1, p0, Lcom/android/systemui/dynamicisland/DynamicIslandController$$ExternalSyntheticLambda2;->f$0:Lcom/android/systemui/dynamicisland/DynamicIslandController;
+
+    iput-object p2, p0, Lcom/android/systemui/dynamicisland/DynamicIslandController$$ExternalSyntheticLambda2;->f$1:Landroid/service/notification/StatusBarNotification;
+
+    return-void
+.end method
+
+
+# virtual methods
+.method public final run()V
+    .locals 2
+
+    .line 0
+    iget-object v0, p0, Lcom/android/systemui/dynamicisland/DynamicIslandController$$ExternalSyntheticLambda2;->f$0:Lcom/android/systemui/dynamicisland/DynamicIslandController;
+
+    iget-object v1, p0, Lcom/android/systemui/dynamicisland/DynamicIslandController$$ExternalSyntheticLambda2;->f$1:Landroid/service/notification/StatusBarNotification;
+
+    invoke-static {v0, v1}, Lcom/android/systemui/dynamicisland/DynamicIslandController;->lambda$onNotificationPosted$0(Lcom/android/systemui/dynamicisland/DynamicIslandController;Landroid/service/notification/StatusBarNotification;)V
+
+    return-void
+.end method

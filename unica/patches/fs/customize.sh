@@ -9,6 +9,16 @@ PATCH_FSTAB()
         if [[ "$f" == *"emmc" ]] || [[ "$f" == *"ramplus" ]]; then
             continue
         fi
+        # Remove file encryption and metadata encryption flags
+        sed -i -E \
+            -e "s/fileencryption=[^,[:space:]]+,?//g" \
+            -e "s/keydirectory=[^,[:space:]]+,?//g" \
+            -e "s/metadata_encryption=[^,[:space:]]+,?//g" \
+            -e "s/forceencrypt=[^,[:space:]]+,?//g" \
+            -e "s/encryptable=[^,[:space:]]+,?//g" \
+            -e "s/quota,?//g" \
+            -e "s/,[[:space:]]*$//g" \
+            "$f"
         if sed -E -i \
             -e "/^[^[:space:]]+[[:space:]]+\/(${PARTITIONS_LIST// /|})[[:space:]]+/ s/^([^[:space:]]+[[:space:]]+[^[:space:]]+)[[:space:]]+[^[:space:]]+[[:space:]]+/\1\t$TARGET_OS_FILE_SYSTEM_TYPE\t/" \
             -e "/^[^[:space:]]+[[:space:]]+\/(${PARTITIONS_LIST// /|})[[:space:]]+/ s/^([^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+[^[:space:]]+)[[:space:]]+[^[:space:]]+[[:space:]]+/\1\tro\t/" \

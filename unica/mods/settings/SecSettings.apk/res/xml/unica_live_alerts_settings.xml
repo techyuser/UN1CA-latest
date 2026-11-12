@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen android:title="@string/unica_live_alerts_title" settings:hierarchicalParentFragment="com.android.settings.homepage.TopLevelSettings" settings:keywords="@string/keywords_live_alerts_settings" settings:topLevelPreferenceKey="top_level_live_alerts"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:settings="http://schemas.android.com/apk/res-auto">
+    <SecSwitchPreference android:persistent="false" android:title="@string/unica_live_alerts_enabled_title" android:key="unica_live_alerts_enabled" android:summary="@string/unica_live_alerts_enabled_summary" />
+    <Preference android:title="@string/unica_live_alerts_preview_title" android:key="unica_live_alerts_preview" android:summary="@string/unica_live_alerts_preview_summary" />
+    <com.samsung.android.settings.widget.SecInsetCategoryPreference />
+    <PreferenceCategory android:title="@string/unica_live_alerts_cat_glass_title" android:key="live_alerts_cat_glass">
+        <androidx.preference.SeekBarPreference android:persistent="false" android:title="@string/unica_live_alerts_blur_title" android:key="unica_live_alerts_blur_radius" />
+        <androidx.preference.SeekBarPreference android:persistent="false" android:title="@string/unica_live_alerts_opacity_title" android:key="unica_live_alerts_glass_opacity" />
+        <androidx.preference.SeekBarPreference android:persistent="false" android:title="@string/unica_live_alerts_rim_title" android:key="unica_live_alerts_rim_alpha" />
+    </PreferenceCategory>
+    <com.samsung.android.settings.widget.SecInsetCategoryPreference />
+    <PreferenceCategory android:title="@string/unica_live_alerts_cat_motion_title" android:key="live_alerts_cat_motion">
+        <androidx.preference.SeekBarPreference android:persistent="false" android:title="@string/unica_live_alerts_speed_title" android:key="unica_live_alerts_anim_speed" />
+        <androidx.preference.SeekBarPreference android:persistent="false" android:title="@string/unica_live_alerts_bounce_title" android:key="unica_live_alerts_anim_bounce" />
+    </PreferenceCategory>
+    <com.samsung.android.settings.widget.SecInsetCategoryPreference />
+    <PreferenceCategory android:title="@string/unica_live_alerts_cat_layout_title" android:key="live_alerts_cat_layout">
+        <androidx.preference.SeekBarPreference android:persistent="false" android:title="@string/unica_live_alerts_height_title" android:key="unica_live_alerts_height_offset_dp" />
+        <androidx.preference.SeekBarPreference android:persistent="false" android:title="@string/unica_live_alerts_gap_title" android:key="unica_live_alerts_gap_offset_dp" />
+        <androidx.preference.SeekBarPreference android:persistent="false" android:title="@string/unica_live_alerts_top_title" android:key="unica_live_alerts_top_offset_dp" />
+        <androidx.preference.SeekBarPreference android:persistent="false" android:title="@string/unica_live_alerts_center_title" android:key="unica_live_alerts_center_offset_dp" />
+        <androidx.preference.SeekBarPreference android:persistent="false" android:title="@string/unica_live_alerts_width_title" android:key="unica_live_alerts_expanded_width_dp" />
+    </PreferenceCategory>
+    <com.samsung.android.settings.widget.SecInsetCategoryPreference />
+    <PreferenceCategory android:title="@string/unica_live_alerts_cat_sources_title" android:key="live_alerts_cat_sources">
+        <SecSwitchPreference android:persistent="false" android:title="@string/unica_live_alerts_src_media_title" android:key="unica_live_alerts_cat_media" android:summary="@string/unica_live_alerts_src_media_summary" />
+        <SecSwitchPreference android:persistent="false" android:title="@string/unica_live_alerts_src_timer_title" android:key="unica_live_alerts_cat_timer" android:summary="@string/unica_live_alerts_src_timer_summary" />
+        <SecSwitchPreference android:persistent="false" android:title="@string/unica_live_alerts_src_hotspot_title" android:key="unica_live_alerts_cat_hotspot" android:summary="@string/unica_live_alerts_src_hotspot_summary" />
+        <SecSwitchPreference android:persistent="false" android:title="@string/unica_live_alerts_src_delivery_title" android:key="unica_live_alerts_cat_delivery" android:summary="@string/unica_live_alerts_src_delivery_summary" />
+        <SecSwitchPreference android:persistent="false" android:title="@string/unica_live_alerts_src_calls_title" android:key="unica_live_alerts_cat_calls" android:summary="@string/unica_live_alerts_src_calls_summary" />
+        <SecSwitchPreference android:persistent="false" android:title="@string/unica_live_alerts_src_recording_title" android:key="unica_live_alerts_cat_recording" android:summary="@string/unica_live_alerts_src_recording_summary" />
+        <SecSwitchPreference android:persistent="false" android:title="@string/unica_live_alerts_src_system_title" android:key="unica_live_alerts_cat_system" android:summary="@string/unica_live_alerts_src_system_summary" />
+        <SecSwitchPreference android:persistent="false" android:title="@string/unica_live_alerts_src_peek_title" android:key="unica_live_alerts_cat_peek" android:summary="@string/unica_live_alerts_src_peek_summary" />
+    </PreferenceCategory>
+    <com.samsung.android.settings.widget.SecInsetCategoryPreference />
+    <Preference android:title="@string/unica_live_alerts_reset_title" android:key="unica_live_alerts_reset" android:summary="@string/unica_live_alerts_reset_summary" />
+</PreferenceScreen>
+
