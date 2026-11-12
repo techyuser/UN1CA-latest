@@ -5,3 +5,5 @@ ro.product.system.model=SM-S926B
 ro.product.system.name=e2sxxx
 ro.product.system.device=e2s
 ro.build.product=e2s
+ro.product.marketname=Galaxy S24+
+ro.product.system.marketname=Galaxy S24+
